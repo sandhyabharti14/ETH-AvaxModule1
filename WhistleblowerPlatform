@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract WhistleblowerPlatform {
+    struct Incident {
+        address informant;
+        string details;
+        bool authenticated;
+        bool compensated;
+    }
+
+    address public chief;
+    uint public incidentCount;
+    mapping(uint => Incident) public incidents;
+
+    event IncidentReported(uint indexed id, address indexed informant);
+    event IncidentAuthenticated(uint indexed id);
+    event CompensationGranted(uint indexed id);
+
+    modifier onlyChief() {
+        require(msg.sender == chief, "Caller is not the chief");
+        _;
+    }
+
+    constructor() {
+        chief = msg.sender;
+    }
+
+    function lodgeComplaint(string memory _details) public {
+        require(bytes(_details).length > 0, "Complaint details are required");
+
+        incidents[++incidentCount] = Incident(msg.sender, _details, false, false);
+        emit IncidentReported(incidentCount, msg.sender);
+    }
+
+    function authenticateComplaint(uint _incidentId) public onlyChief {
+        require(_incidentId > 0 && _incidentId <= incidentCount, "Invalid incident ID");
+
+        Incident storage incident = incidents[_incidentId];
+        require(!incident.authenticated, "Complaint already authenticated");
+
+        incident.authenticated = true;
+        emit IncidentAuthenticated(_incidentId);
+    }
+
+    function grantCompensation(uint _incidentId) public onlyChief {
+        require(_incidentId > 0 && _incidentId <= incidentCount, "Invalid incident ID");
+
+        Incident storage incident = incidents[_incidentId];
+        require(incident.authenticated &&!incident.compensated, "Invalid compensation state");
+
+        incident.compensated = true;
+        (bool success, ) = incident.informant.call{value: 0 wei}("");
+        require(success, "Compensation transfer failed");
+
+        emit CompensationGranted(_incidentId);
+    }
+
+    function validateState() public view {
+        assert(incidentCount >= 0);
+    }
+
+    function forceRevert(string memory _reason) public pure {
+        revert(_reason);
+    }
+
+    receive() external payable {
+    }
+}
